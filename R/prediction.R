@@ -25,10 +25,23 @@ original_data[original_data$duration <= 1061,]$duration_cat <- 2
 original_data[original_data$duration <= 720,]$duration_cat <- 1
 original_data$duration_cat <- as.factor(original_data$duration_cat)
 
+start <- strsplit(original_data$startdate,"-")
+end <- strsplit(original_data$enddate,"-")
 
+start_day <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][1],sep="")))
+start_month <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][2],sep="")))
+start_year <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][3],sep="")))
+original_data$start_day <- as.factor(start_day)
+original_data$start_month <- as.factor(start_month)
+original_data$start_year <- as.factor(start_year)
 
-# start <- strsplit(original_data$startdate,"-")
-# end <- strsplit(original_data$enddate,"-")
+end_day <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][1],sep="")))
+end_month <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][2],sep="")))
+end_year <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][3],sep="")))
+original_data$end_day <- as.factor(end_day)
+original_data$end_month <- as.factor(end_month)
+original_data$end_year <- as.factor(end_year)
+
 # new_start <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][1],"-",start[[x]][2],"-",original_data[x,]$year,sep="")))
 # new_end <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][1],"-",end[[x]][2],"-",original_data[x,]$year,sep="")))
 # original_data$startdate <- new_start
@@ -88,7 +101,7 @@ combined_clean$starttime <- NULL
 combined_clean$enddate <- as.factor(combined_clean$enddate)
 combined_clean$endtime <- NULL
 combined_clean$core <- as.factor(combined_clean$core)
-combined_clean$weights <- 1/5
+# combined_clean$weights <- 1/5
 
 # Boosting
 set.seed(1005)
