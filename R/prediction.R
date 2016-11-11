@@ -103,6 +103,12 @@ colnames(avars_data) <- c("id","gender","position","year_birth","age_member","ag
 	"gross_monthly_income_cat","net_monthly_income_cat","gross_household_income","net_household_income",
 	"edu","edu_diploma","edu_cat","is_member","recruitment","origin","have_simPC")
 
+factors <- c("gender","position","year_birth","age_member","age_cat","age_head","num_members", "num_children","partner","civil_status",
+             "dom_sit","dwell_type","urban_char","occ", "gross_monthly_income_cat","net_monthly_income_cat", "edu","edu_diploma",
+             "edu_cat","is_member","recruitment","origin","have_simPC")
+			   
+			   
+			   
 # avars_data[(avars_data$gross_monthly_income == -15) | (avars_data$gross_monthly_income == -13),]$gross_monthly_income <- NA
 # avars_data[(avars_data$net_monthly_income == -14),]$net_monthly_income <- NA
 # avars_data[(avars_data$net_monthly_income_capped == -15) | (avars_data$net_monthly_income_capped == -13),]$net_monthly_income_capped <- NA
@@ -124,6 +130,10 @@ combined_clean$endtime <- NULL
 combined_clean$core <- as.factor(combined_clean$core)
 # combined_clean$weights <- 1/5
 
+for (i in 1:length(factors)) {
+  combined_clean[,factors[i]] <- as.factor(combined_clean[,factors[i]])
+}			   
+			   
 # Boosting
 set.seed(1005)
 train_percentage <- 0.8
