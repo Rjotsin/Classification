@@ -25,22 +25,44 @@ original_data[original_data$duration <= 1061,]$duration_cat <- 2
 original_data[original_data$duration <= 720,]$duration_cat <- 1
 original_data$duration_cat <- as.factor(original_data$duration_cat)
 
-start <- strsplit(original_data$startdate,"-")
-end <- strsplit(original_data$enddate,"-")
+parse_datetimes <- function(delimeter,col){
 
-start_day <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][1],sep="")))
-start_month <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][2],sep="")))
-start_year <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][3],sep="")))
-original_data$start_day <- as.factor(start_day)
-original_data$start_month <- as.factor(start_month)
-original_data$start_year <- as.factor(start_year)
+  splits <- strsplit(original_data[,c(col)],delimeter)
 
-end_day <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][1],sep="")))
-end_month <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][2],sep="")))
-end_year <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][3],sep="")))
-original_data$end_day <- as.factor(end_day)
-original_data$end_month <- as.factor(end_month)
-original_data$end_year <- as.factor(end_year)
+  split_1 <- as.factor(unlist(lapply(1:nrow(original_data), function(x) paste(splits[[x]][1],sep=""))))
+  split_2 <- as.factor(unlist(lapply(1:nrow(original_data), function(x) paste(splits[[x]][2],sep=""))))
+  split_3 <- as.factor(unlist(lapply(1:nrow(original_data), function(x) paste(splits[[x]][3],sep=""))))
+
+  output <- c(split_1, split_2, split_3)
+
+  return(output)
+
+}
+
+start_dates <- parse_datetimes("-", "startdate")
+
+
+original_data$start_day <- as.factor(start_dates[1])
+original_data$start_month <- as.factor(start_dates[2])
+original_data$start_year <- as.factor(start_dates[3])
+
+end_dates <- parse_datetimes("-", "enddate")
+
+original_data$end_day <- as.factor(end_dates[1])
+original_data$end_month <- as.factor(end_dates[2])
+original_data$end_year <- as.factor(end_dates[3])
+
+start_times <-parse_datetimes(":","starttime")
+
+original_data$start_hr <- as.factor(start_times[1])
+original_data$start_min <- as.factor(start_times[2])
+original_data$start_sec <- as.factor(start_times[3])
+
+end_times <- parse_datetimes(":","endtime")
+
+original_data$end_hr <- as.factor(end_times[1])
+original_data$end_min <- as.factor(end_times[2])
+original_data$end_sec <- as.factor(end_times[3])
 
 # new_start <- unlist(lapply(1:nrow(original_data), function(x) paste(start[[x]][1],"-",start[[x]][2],"-",original_data[x,]$year,sep="")))
 # new_end <- unlist(lapply(1:nrow(original_data), function(x) paste(end[[x]][1],"-",end[[x]][2],"-",original_data[x,]$year,sep="")))
