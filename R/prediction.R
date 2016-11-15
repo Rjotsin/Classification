@@ -226,13 +226,13 @@ gbmFit1 <- train(interesting ~ .,
 boosting_results <- resamples(gbm = gbmFit1)
 
 gbm_fit <- gbm(interesting ~ ., 
-               cv.folds = 2,
+               cv.folds = 3,
                # weights = train_data$weights,
                n.trees = 50,
                data = train_data, 
                distribution = "multinomial",
                shrinkage = 0.1, 
-               interaction.depth = 3, 
+               interaction.depth = 5, 
                n.minobsinnode = 10)
 
 best.iter <- gbm.perf(gbm_fit,method="OOB")
@@ -249,9 +249,57 @@ glm1 <- glmboost(interesting ~ ., data = original_data)
 
 # SVM
 library(e1071)
+library(kernlab)
 
-s1 <- svm(interesting ~ ., data = train_data, kernel = "linear", cost = 10)
-svm_predict <- predict(s1, as.data.frame(test_set$interesting))
+folds <- cut(seq(1,nrow(train_data)),breaks=4,labels=FALSE)
+train_1 <- train_data[which(folds == 1),]
+train_2 <- train_data[which(folds == 2),]
+train_3 <- train_data[which(folds == 3),]
+train_4 <- train_data[which(folds == 4),]
+# train_5 <- train_data[which(folds == 5),]
+
+s1 <- ksvm(interesting~.,
+           data=train_1,
+           type="C-bsvc",
+           kernel=polydot(degree = 2),
+           C=5,
+           prob.model = TRUE)
+s2 <- ksvm(interesting~.,
+           data=train_2,
+           type="C-bsvc",
+           kernel=polydot(degree = 2),
+           C=5,
+           prob.model = TRUE)
+s3 <- ksvm(interesting~.,
+           data=train_3,
+           type="C-bsvc",
+           kernel=polydot(degree = 2),
+           C=5,
+           prob.model = TRUE)
+s4 <- ksvm(interesting~.,
+           data=train_4,
+           type="C-bsvc",
+           kernel=polydot(degree = 2),
+           C=5,
+           prob.model = TRUE)
+# s1 <- ksvm(interesting~.,
+#            data=train_1,
+#            type="C-bsvc",
+#            kernel=polydot(degree = 2),
+#            C=5,
+#            prob.model = TRUE)
+
+svm_predict1 <- predict(s1, test_set[,-2])
+svm_predict2 <- predict(s2, test_set[,-2])
+svm_predict3 <- predict(s3, test_set[,-2])
+svm_predict4 <- predict(s4, test_set[,-2])
+# svm_predict5 <- predict(s5, test_set)
+
+svm_predict$1 <- (svm_predict1$1 + svm_predict2$1 + svm_predict3$1 + svm_predict4$1)/4
+svm_predict$2 <- (svm_predict1$2 + svm_predict2$2 + svm_predict3$2 + svm_predict4$2)/4
+svm_predict$3 <- (svm_predict1$3 + svm_predict2$3 + svm_predict3$3 + svm_predict4$3)/4
+svm_predict$4 <- (svm_predict1$4 + svm_predict2$4 + svm_predict3$4 + svm_predict4$4)/4
+svm_predict$5 <- (svm_predict1$5 + svm_predict2$5 + svm_predict3$5 + svm_predict4$5)/4
 
 table(test_set$interesting, svm_predict)
 
@@ -270,3 +318,4 @@ qda_table <- table(test_set$interesting, lda_predict)
 
 test_set$qda_pred <- qda_predict
 qda_acc <- nrow(test_set[test_set$interesting == test_set$qda_pred,])/nrow(test_set)
+
