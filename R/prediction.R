@@ -110,6 +110,7 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
   data_frame$start_hr_min <- paste(data_frame$start_hr,data_frame$start_min,sep=":")
   data_frame[data_frame$start_hr_min == "NA:NA",]$start_hr_min <- NA
+  data_frame$start_hr_min <- as.factor(data_frame$start_hr_min)
 
   end_times <- parse_datetimes(data_frame,":","endtime")
 
@@ -118,6 +119,7 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
   data_frame$end_hr_min <- paste(data_frame$end_hr,data_frame$end_min,sep=":")
   data_frame[data_frame$end_hr_min == "NA:NA",]$end_hr_min <- NA
+  data_frame$end_hr_min <- as.factor(data_frame$end_hr_min)
 
   new_start <- unlist(lapply(1:nrow(data_frame), function(x) paste(start_dates[[1]][x],"-",start_dates[[2]][x],"-",start_dates[[3]][x],sep="")))
   new_end <- unlist(lapply(1:nrow(data_frame), function(x) paste(end_dates[[1]][x],"-",end_dates[[2]][x],"-",end_dates[[3]][x],sep="")))
@@ -152,7 +154,6 @@ cleanup <- function(data_frame, test = FALSE){
              "edu_cat","is_member","recruitment","origin","have_simPC")
          
   combined <- merge(x=data_frame,y=avars_data,by="id",all.x=TRUE)
-  # combined <- merge(x=balanced,y=avars_data,by="id",all.x=TRUE)
   combined_clean <- combined
   # combined_clean$id <- NULL
   # combined_clean$interesting <- NULL
@@ -193,27 +194,29 @@ test_data <- cleanup(test_data, test=TRUE)
 #     1     2     3     4     5 
 #  4079  7748 30086 24117 14262 
 
-one <- (original_data[original_data$interesting == 1,])
-one_index <- sample(1:nrow(one), 4079)
-one <- one[one_index,]
+# Looking at addressing the imbalance issue
 
-two <- (original_data[original_data$interesting == 2,])
-two_index <- sample(1:nrow(two), 6000)
-two <- two[two_index,]
+# one <- (original_data[original_data$interesting == 1,])
+# one_index <- sample(1:nrow(one), 4079)
+# one <- one[one_index,]
 
-three <- (original_data[original_data$interesting == 3,])
-three_index <- sample(1:nrow(three), 6000)
-three <- three[three_index,]
+# two <- (original_data[original_data$interesting == 2,])
+# two_index <- sample(1:nrow(two), 6000)
+# two <- two[two_index,]
 
-four <- (original_data[original_data$interesting == 4,])
-four_index <- sample(1:nrow(four), 6000)
-four <- four[four_index,]
+# three <- (original_data[original_data$interesting == 3,])
+# three_index <- sample(1:nrow(three), 6000)
+# three <- three[three_index,]
 
-five <- (original_data[original_data$interesting == 5,])
-five_index <- sample(1:nrow(five), 6000)
-five <- five[five_index,]
+# four <- (original_data[original_data$interesting == 4,])
+# four_index <- sample(1:nrow(four), 6000)
+# four <- four[four_index,]
 
-balanced <- rbind(one,two,three,four,five)	   
+# five <- (original_data[original_data$interesting == 5,])
+# five_index <- sample(1:nrow(five), 6000)
+# five <- five[five_index,]
+
+# balanced <- rbind(one,two,three,four,five)	   
 
 set.seed(1017)
 train_percentage <- 0.8
@@ -263,9 +266,10 @@ gbm_predict_prob <- as.data.frame(predict.gbm(gbm_fit, test_data, n.trees=best.i
 gbm_predict <- cbind(test_data$obs,gbm_predict_prob)
 colnames(gbm_predict) <- c("obs","interesting1","interesting2","interesting3","interesting4","interesting5")
 
-gbm_predict_guesses <- as.factor(max.col(gbm_predict_prob))
 write.table (gbm_predict, col.names=T, row.names=F, quote=F, sep=",", file="sumbission.csv")
 
+gbm_predict_guesses <- as.factor(max.col(gbm_predict_prob))
+# Getting confusion matrix and f-measure
 cm <- table(test_set$interesting, gbm_predict)
 f_boost <- f_measure(cm)
 
