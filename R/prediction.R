@@ -108,12 +108,16 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$start_hr <- as.factor(as.numeric(start_times[[1]]))
   data_frame$start_min <- as.factor(as.numeric(start_times[[2]]))
   data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
+  data_frame$start_hr_min <- paste(data_frame$start_hr,data_frame$start_min,sep=":")
+  data_frame[data_frame$start_hr_min == "NA:NA",]$start_hr_min <- NA
 
   end_times <- parse_datetimes(data_frame,":","endtime")
 
   data_frame$end_hr <- as.factor(as.numeric(end_times[[1]]))
   data_frame$end_min <- as.factor(as.numeric(end_times[[2]]))
   data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
+  data_frame$end_hr_min <- paste(data_frame$end_hr,data_frame$end_min,sep=":")
+  data_frame[data_frame$end_hr_min == "NA:NA",]$end_hr_min <- NA
 
   new_start <- unlist(lapply(1:nrow(data_frame), function(x) paste(start_dates[[1]][x],"-",start_dates[[2]][x],"-",start_dates[[3]][x],sep="")))
   new_end <- unlist(lapply(1:nrow(data_frame), function(x) paste(end_dates[[1]][x],"-",end_dates[[2]][x],"-",end_dates[[3]][x],sep="")))
@@ -231,7 +235,7 @@ fitControl <- trainControl(## 10-fold CV
   repeats = 2)
 
 gbmFit1 <- train(interesting ~ .,
-                 data = train_data,
+                 data = train_data[sample(1:nrow(train_data),500),],
                  na.action = na.omit,
                  method = "gbm", 
                  trControl = fitControl,
@@ -240,25 +244,30 @@ gbmFit1 <- train(interesting ~ .,
                  ## for gbm() that passes through
                  verbose = FALSE)
 
-boosting_results <- resamples(gbm = gbmFit1)
+boosting_results <- resamples(list(gbm = gbmFit1,gbm = gbmFit1))
 
 gbm_fit <- gbm(interesting ~ ., 
-               cv.folds = 3,
+               cv.folds = 2,
                # weights = train_data$weights,
                n.trees = 50,
-               data = train_data, 
+               data = original_data, 
                distribution = "multinomial",
                shrinkage = 0.1, 
-               interaction.depth = 5, 
+               interaction.depth = 3, 
                n.minobsinnode = 10)
 
 best.iter <- gbm.perf(gbm_fit,method="OOB")
 best.iter <- gbm.perf(gbm_fit,method="cv")
 
-gbm_predict_prob <- as.data.frame(predict.gbm(gbm_fit, test_set, n.trees=best.iter, type="response"))
-gbm_predict <- as.factor(max.col(gbm_predict_prob))
+gbm_predict_prob <- as.data.frame(predict.gbm(gbm_fit, test_data, n.trees=best.iter, type="response"))
+gbm_predict <- cbind(test_data$obs,gbm_predict_prob)
+colnames(gbm_predict) <- c("obs","interesting1","interesting2","interesting3","interesting4","interesting5")
+
+gbm_predict_guesses <- as.factor(max.col(gbm_predict_prob))
+write.table (gbm_predict, col.names=T, row.names=F, quote=F, sep=",", file="sumbission.csv")
 
 cm <- table(test_set$interesting, gbm_predict)
+f_boost <- f_measure(cm)
 
 # SVM
 library(e1071)
