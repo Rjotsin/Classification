@@ -34,6 +34,24 @@ colnames(avars_data) <- c("id","gender","position","year_birth","age_member","ag
   "gross_monthly_income_cat","net_monthly_income_cat","gross_household_income","net_household_income",
   "edu","edu_diploma","edu_cat","is_member","recruitment","origin","have_simPC")
 
+f_measure <- function(data_frame){
+  tp <- 0
+  fp <- 0
+  fn <- 0
+  
+  for (i in 1:nrow(data_frame)){
+    tp <- tp + cm[i,i]
+    fp <- fp + sum(cm[, i])-cm[i, i]
+    fn <- fn + sum(cm[i,])-cm[i, i]
+  }
+
+  precision <- tp/(tp+fp)
+  recall <- tp/(tp+fn)
+  f <- 2*(precision*recall)/(precision + recall)
+  
+  return(f)
+}
+
 parse_datetimes <- function(data_frame, delimeter,col){
 
   splits <- strsplit(data_frame[,c(col)],delimeter)
@@ -208,9 +226,8 @@ library(gbm)
 library(caret)
 
 fitControl <- trainControl(## 10-fold CV
-  method = "cv",
-  number = 2,
-  ## repeated ten times
+  method = "repeatedcv",
+  number = 5,
   repeats = 2)
 
 gbmFit1 <- train(interesting ~ .,
@@ -221,7 +238,7 @@ gbmFit1 <- train(interesting ~ .,
                  metric = "Accuracy",
                  ## This last option is actually one
                  ## for gbm() that passes through
-                 verbose = TRUE)
+                 verbose = FALSE)
 
 boosting_results <- resamples(gbm = gbmFit1)
 
@@ -238,14 +255,10 @@ gbm_fit <- gbm(interesting ~ .,
 best.iter <- gbm.perf(gbm_fit,method="OOB")
 best.iter <- gbm.perf(gbm_fit,method="cv")
 
-gbm_predict <- as.data.frame(predict.gbm(gbm_fit, test_set, n.trees=best.iter, type="response"))
-gbm_predict <- as.factor(max.col(gbm_predict))
+gbm_predict_prob <- as.data.frame(predict.gbm(gbm_fit, test_set, n.trees=best.iter, type="response"))
+gbm_predict <- as.factor(max.col(gbm_predict_prob))
 
-table(test_set$interesting, gbm_predict)
-
-library("mboost")
-
-glm1 <- glmboost(interesting ~ ., data = original_data)
+cm <- table(test_set$interesting, gbm_predict)
 
 # SVM
 library(e1071)
@@ -289,33 +302,18 @@ s4 <- ksvm(interesting~.,
 #            C=5,
 #            prob.model = TRUE)
 
-svm_predict1 <- predict(s1, test_set[,-2])
-svm_predict2 <- predict(s2, test_set[,-2])
-svm_predict3 <- predict(s3, test_set[,-2])
-svm_predict4 <- predict(s4, test_set[,-2])
+svm_predict1 <- as.data.frame(predict(s1, test_set[,-2], type = "probabilities"))
+svm_predict2 <- as.data.frame(predict(s2, test_set[,-2], type = "probabilities"))
+svm_predict3 <- as.data.frame(predict(s3, test_set[,-2], type = "probabilities"))
+svm_predict4 <- as.data.frame(predict(s4, test_set[,-2], type = "probabilities"))
 # svm_predict5 <- predict(s5, test_set)
 
-svm_predict$1 <- (svm_predict1$1 + svm_predict2$1 + svm_predict3$1 + svm_predict4$1)/4
-svm_predict$2 <- (svm_predict1$2 + svm_predict2$2 + svm_predict3$2 + svm_predict4$2)/4
-svm_predict$3 <- (svm_predict1$3 + svm_predict2$3 + svm_predict3$3 + svm_predict4$3)/4
-svm_predict$4 <- (svm_predict1$4 + svm_predict2$4 + svm_predict3$4 + svm_predict4$4)/4
-svm_predict$5 <- (svm_predict1$5 + svm_predict2$5 + svm_predict3$5 + svm_predict4$5)/4
+svm_predict <- svm_predict1
+svm_predict[,1] <- (svm_predict1[,1] + svm_predict2[,1] + svm_predict3[,1])/3 #+ svm_predict4$1)/4
+svm_predict[,2] <- (svm_predict1[,2] + svm_predict2[,2] + svm_predict3[,2])/3 #+ svm_predict4$2)/4
+svm_predict[,3] <- (svm_predict1[,3] + svm_predict2[,3] + svm_predict3[,3])/3 #+ svm_predict4$3)/4
+svm_predict[,4] <- (svm_predict1[,4] + svm_predict2[,4] + svm_predict3[,4])/3 #+ svm_predict4$4)/4
+svm_predict[,5] <- (svm_predict1[,5] + svm_predict2[,5] + svm_predict3[,5])/3# + svm_predict4$5)/4
 
 table(test_set$interesting, svm_predict)
-
-# LDA
-train_lda <- lda(interesting ~ year + month + sameday + norm_duration + core, train_data)
-lda_predict <- predict(train_lda, original_data[-train_index, ])$class
-lda_table <- table(test_set$interesting, lda_predict)
-
-test_set$lda_pred <- lda_predict
-lda_acc <- nrow(test_set[test_set$interesting == test_set$lda_pred,])/nrow(test_set)
-
-# QDA
-train_qda <- qda(interesting ~ year_month_m + difficult + clear + thinking + enjoy + duration + core, train_data)
-qda_predict <- predict(train_qda, original_data[-train_index, ])$class
-qda_table <- table(test_set$interesting, lda_predict)
-
-test_set$qda_pred <- qda_predict
-qda_acc <- nrow(test_set[test_set$interesting == test_set$qda_pred,])/nrow(test_set)
 
