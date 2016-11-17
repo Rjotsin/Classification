@@ -110,18 +110,18 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$start_hr <- as.factor(as.numeric(start_times[[1]]))
   data_frame$start_min <- as.factor(as.numeric(start_times[[2]]))
   data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
-  data_frame$start_hr_min <- paste(data_frame$start_hr,data_frame$start_min,sep=":")
-  data_frame[data_frame$start_hr_min == "NA:NA",]$start_hr_min <- NA
-  data_frame$start_hr_min <- as.factor(data_frame$start_hr_min)
+  # data_frame$start_hr_min <- paste(data_frame$start_hr,data_frame$start_min,sep=":")
+  # data_frame[data_frame$start_hr_min == "NA:NA",]$start_hr_min <- NA
+  # data_frame$start_hr_min <- as.factor(data_frame$start_hr_min)
 
   end_times <- parse_datetimes(data_frame,":","endtime")
 
   data_frame$end_hr <- as.factor(as.numeric(end_times[[1]]))
   data_frame$end_min <- as.factor(as.numeric(end_times[[2]]))
   data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
-  data_frame$end_hr_min <- paste(data_frame$end_hr,data_frame$end_min,sep=":")
-  data_frame[data_frame$end_hr_min == "NA:NA",]$end_hr_min <- NA
-  data_frame$end_hr_min <- as.factor(data_frame$end_hr_min)
+  # data_frame$end_hr_min <- paste(data_frame$end_hr,data_frame$end_min,sep=":")
+  # data_frame[data_frame$end_hr_min == "NA:NA",]$end_hr_min <- NA
+  # data_frame$end_hr_min <- as.factor(data_frame$end_hr_min)
 
   new_start <- unlist(lapply(1:nrow(data_frame), function(x) paste(start_dates[[1]][x],"-",start_dates[[2]][x],"-",start_dates[[3]][x],sep="")))
   new_end <- unlist(lapply(1:nrow(data_frame), function(x) paste(end_dates[[1]][x],"-",end_dates[[2]][x],"-",end_dates[[3]][x],sep="")))
@@ -155,27 +155,22 @@ cleanup <- function(data_frame, test = FALSE){
 
   # Finding the number of past surveys done for each core 
   data_frame_leisure <- data_frame[data_frame$core == "leisure",]
-  data_frame_leisure$past_health_surveys <- 0
-  data_frame_leisure$past_income_surveys <- 0
+  data_frame_leisure$past_health_surveys <- NA
+  data_frame_leisure$past_income_surveys <- NA
   data_frame_leisure <- data_frame_leisure %>% group_by(id) %>% mutate(past_leisure_surveys=0:(n()-1))
 
   data_frame_health <- data_frame[data_frame$core == "health",]
-  data_frame_health$past_leisure_surveys <- 0
-  data_frame_health$past_income_surveys <- 0
+  data_frame_health$past_leisure_surveys <- NA
+  data_frame_health$past_income_surveys <- NA
   data_frame_health <- data_frame_health %>% group_by(id) %>% mutate(past_health_surveys=0:(n()-1))
 
   data_frame_income <- data_frame[data_frame$core == "income",]
-  data_frame_income$past_health_surveys <- 0
-  data_frame_income$past_leisure_surveys <- 0
+  data_frame_income$past_health_surveys <- NA
+  data_frame_income$past_leisure_surveys <- NA
   data_frame_income <- data_frame_income %>% group_by(id) %>% mutate(past_income_surveys=0:(n()-1))
 
   data_frame <- rbind(data_frame_health, data_frame_income)
   data_frame <- rbind(data_frame, data_frame_leisure)
-
-  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
-  data_frame[data_frame$past_income_surveys == 0,]$past_income_surveys <- NA
-  data_frame[data_frame$past_health_surveys == 0,]$past_health_surveys <- NA
-  data_frame[data_frame$past_leisure_surveys == 0,]$past_leisure_surveys <- NA
 
   data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
   data_frame <- data_frame %>% group_by(id) %>% fill(past_leisure_surveys)
@@ -367,11 +362,11 @@ svm_predict4 <- as.data.frame(predict(s4, test_set[,-2], type = "probabilities")
 # svm_predict5 <- predict(s5, test_set)
 
 svm_predict <- svm_predict1
-svm_predict[,1] <- (svm_predict1[,1] + svm_predict2[,1] + svm_predict3[,1])/3 #+ svm_predict4$1)/4
-svm_predict[,2] <- (svm_predict1[,2] + svm_predict2[,2] + svm_predict3[,2])/3 #+ svm_predict4$2)/4
-svm_predict[,3] <- (svm_predict1[,3] + svm_predict2[,3] + svm_predict3[,3])/3 #+ svm_predict4$3)/4
-svm_predict[,4] <- (svm_predict1[,4] + svm_predict2[,4] + svm_predict3[,4])/3 #+ svm_predict4$4)/4
-svm_predict[,5] <- (svm_predict1[,5] + svm_predict2[,5] + svm_predict3[,5])/3# + svm_predict4$5)/4
+svm_predict[,1] <- (svm_predict1[,1] + svm_predict2[,1] + svm_predict3[,1])/3 # + svm_predict4$1)/4
+svm_predict[,2] <- (svm_predict1[,2] + svm_predict2[,2] + svm_predict3[,2])/3 # + svm_predict4$2)/4
+svm_predict[,3] <- (svm_predict1[,3] + svm_predict2[,3] + svm_predict3[,3])/3 # + svm_predict4$3)/4
+svm_predict[,4] <- (svm_predict1[,4] + svm_predict2[,4] + svm_predict3[,4])/3 # + svm_predict4$4)/4
+svm_predict[,5] <- (svm_predict1[,5] + svm_predict2[,5] + svm_predict3[,5])/3 # + svm_predict4$5)/4
 
 table(test_set$interesting, svm_predict)
 
