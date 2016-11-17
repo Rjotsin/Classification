@@ -2,6 +2,8 @@ library(MASS)
 library(class)
 library(plyr)
 library(reshape2)
+library(dplyr)
+library(tidyr)
 
 TRAIN_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/combined.csv"
 TEST_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/test.csv"
@@ -135,15 +137,58 @@ cleanup <- function(data_frame, test = FALSE){
   colnames(count_table) <- c("id","num_surveys")
   data_frame <- merge(data_frame, count_table, all.x = TRUE,by = "id")
   
-  core_table <- count(data_frame, c("id","core"))
+  # core_table <- count(data_frame, c("id","core"))
+  core_table <- as.data.frame(table(data_frame$id,data_frame$core))
   
-  core_table_wide <- dcast(core_table,formula = id~core,value.var="freq")
+  # core_table_wide <- dcast(core_table,formula = id~core,value.var="freq")
+  core_table_wide <- dcast(core_table,formula = Var1~Var2,value.var="Freq")
   colnames(core_table_wide) <- c("id","num_health","num_income","num_leisure")
-  core_table_wide[is.na(core_table_wide$num_health),]$num_health <- 0
-  core_table_wide[is.na(core_table_wide$num_income),]$num_income <- 0
-  core_table_wide[is.na(core_table_wide$num_leisure),]$num_leisure <- 0
+  # core_table_wide[is.na(core_table_wide$num_health),]$num_health <- 0
+  # core_table_wide[is.na(core_table_wide$num_income),]$num_income <- 0
+  # core_table_wide[is.na(core_table_wide$num_leisure),]$num_leisure <- 0
   
   data_frame <- merge(data_frame, core_table_wide, all.x = TRUE,by = "id")
+  
+  # Finding the number of surveys up to that point
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% mutate(past_surveys=0:(n()-1))
+
+  # Finding the number of past surveys done for each core 
+  data_frame_leisure <- data_frame[data_frame$core == "leisure",]
+  data_frame_leisure$past_health_surveys <- 0
+  data_frame_leisure$past_income_surveys <- 0
+  data_frame_leisure <- data_frame_leisure %>% group_by(id) %>% mutate(past_leisure_surveys=0:(n()-1))
+
+  data_frame_health <- data_frame[data_frame$core == "health",]
+  data_frame_health$past_leisure_surveys <- 0
+  data_frame_health$past_income_surveys <- 0
+  data_frame_health <- data_frame_health %>% group_by(id) %>% mutate(past_health_surveys=0:(n()-1))
+
+  data_frame_income <- data_frame[data_frame$core == "income",]
+  data_frame_income$past_health_surveys <- 0
+  data_frame_income$past_leisure_surveys <- 0
+  data_frame_income <- data_frame_income %>% group_by(id) %>% mutate(past_income_surveys=0:(n()-1))
+
+  data_frame <- rbind(data_frame_health, data_frame_income)
+  data_frame <- rbind(data_frame, data_frame_leisure)
+
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame[data_frame$past_income_surveys == 0,]$past_income_surveys <- NA
+  data_frame[data_frame$past_health_surveys == 0,]$past_health_surveys <- NA
+  data_frame[data_frame$past_leisure_surveys == 0,]$past_leisure_surveys <- NA
+
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% fill(past_leisure_surveys)
+
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% fill(past_health_surveys)
+
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% fill(past_income_surveys)
+
+  data_frame[is.na(data_frame$past_income_surveys),]$past_income_surveys <- 0
+  data_frame[is.na(data_frame$past_health_surveys),]$past_health_surveys <- 0
+  data_frame[is.na(data_frame$past_leisure_surveys),]$past_leisure_surveys <- 0
   
   duration_means <- ddply(data_frame,~id,summarise,mean=mean(duration))
   colnames(duration_means) <- c("id","duration_mean") 
