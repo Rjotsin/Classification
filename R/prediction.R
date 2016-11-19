@@ -5,6 +5,8 @@ library(reshape2)
 library(dplyr)
 library(tidyr)
 
+set.seed(1017)
+
 TRAIN_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/combined.csv"
 TEST_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/test.csv"
 AVARS_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/avars1.csv"
@@ -83,11 +85,11 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$month <- as.factor(substr(data_frame$year_month_m,5,6))
   data_frame[data_frame$core == "",]$core <- "leisure"
   data_frame$core <- as.factor(data_frame$core)
-  data_frame$duration_cat <- 4
-  data_frame[data_frame$duration <= 1643,]$duration_cat <- 3
-  data_frame[data_frame$duration <= 1061,]$duration_cat <- 2
-  data_frame[data_frame$duration <= 720,]$duration_cat <- 1
-  data_frame$duration_cat <- as.factor(data_frame$duration_cat)
+  # data_frame$duration_cat <- 4
+  # data_frame[data_frame$duration <= 1643,]$duration_cat <- 3
+  # data_frame[data_frame$duration <= 1061,]$duration_cat <- 2
+  # data_frame[data_frame$duration <= 720,]$duration_cat <- 1
+  # data_frame$duration_cat <- as.factor(data_frame$duration_cat)
 
   start_dates <- parse_datetimes(data_frame,"-", "startdate")
   start_dates[[3]] <- unlist(lapply(1:nrow(data_frame), function(x) if(start_dates[[3]][x] == "08"){start_dates[[3]][x] <- "2008"} else {start_dates[[3]][x]}))
@@ -110,18 +112,18 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$start_hr <- as.factor(as.numeric(start_times[[1]]))
   data_frame$start_min <- as.factor(as.numeric(start_times[[2]]))
   data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
-  # data_frame$start_hr_min <- paste(data_frame$start_hr,data_frame$start_min,sep=":")
-  # data_frame[data_frame$start_hr_min == "NA:NA",]$start_hr_min <- NA
-  # data_frame$start_hr_min <- as.factor(data_frame$start_hr_min)
+  data_frame$start_hr_min <- paste(data_frame$start_hr,data_frame$start_min,sep=":")
+  data_frame[data_frame$start_hr_min == "NA:NA",]$start_hr_min <- NA
+  data_frame$start_hr_min <- as.factor(data_frame$start_hr_min)
 
   end_times <- parse_datetimes(data_frame,":","endtime")
 
   data_frame$end_hr <- as.factor(as.numeric(end_times[[1]]))
   data_frame$end_min <- as.factor(as.numeric(end_times[[2]]))
   data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
-  # data_frame$end_hr_min <- paste(data_frame$end_hr,data_frame$end_min,sep=":")
-  # data_frame[data_frame$end_hr_min == "NA:NA",]$end_hr_min <- NA
-  # data_frame$end_hr_min <- as.factor(data_frame$end_hr_min)
+  data_frame$end_hr_min <- paste(data_frame$end_hr,data_frame$end_min,sep=":")
+  data_frame[data_frame$end_hr_min == "NA:NA",]$end_hr_min <- NA
+  data_frame$end_hr_min <- as.factor(data_frame$end_hr_min)
 
   new_start <- unlist(lapply(1:nrow(data_frame), function(x) paste(start_dates[[1]][x],"-",start_dates[[2]][x],"-",start_dates[[3]][x],sep="")))
   new_end <- unlist(lapply(1:nrow(data_frame), function(x) paste(end_dates[[1]][x],"-",end_dates[[2]][x],"-",end_dates[[3]][x],sep="")))
@@ -130,8 +132,8 @@ cleanup <- function(data_frame, test = FALSE){
 
   data_frame$startdate_epoch <- floor(as.integer(as.POSIXct(data_frame$startdate, format = "%d-%M-%Y"))/86400)
   data_frame$enddate_epoch <- floor(as.integer(as.POSIXct(data_frame$enddate, format = "%d-%M-%Y"))/86400)
-  data_frame$sameday <- as.factor(as.integer(data_frame$startdate == data_frame$enddate))
-  data_frame$delta_days <- data_frame$enddate_epoch - data_frame$startdate_epoch
+  # data_frame$sameday <- as.factor(as.integer(data_frame$startdate == data_frame$enddate))
+  # data_frame$delta_days <- data_frame$enddate_epoch - data_frame$startdate_epoch
   
   count_table <- as.data.frame(table(data_frame$id))
   colnames(count_table) <- c("id","num_surveys")
@@ -227,6 +229,11 @@ original_data <- cleanup(original_data, test=FALSE)
 original_data$obs <- NULL
 original_data$id <- NULL
 
+nums <- sapply(original_data, is.numeric)
+ints <- sapply(original_data, is.integer)
+
+# original_data <- upSample(original_data, original_data$interesting)
+
 test_data <- cleanup(test_data, test=TRUE)
 
 # > table(original_data$interesting)
@@ -258,7 +265,6 @@ test_data <- cleanup(test_data, test=TRUE)
 
 # balanced <- rbind(one,two,three,four,five)	   
 
-set.seed(1017)
 train_percentage <- 0.8
 train_index <- sample(1:nrow(original_data), floor(nrow(original_data)*train_percentage))
 train_data <- original_data[train_index, ]
@@ -289,11 +295,15 @@ gbmFit1 <- train(interesting ~ .,
 
 boosting_results <- resamples(list(gbm = gbmFit1,gbm = gbmFit1))
 
+pp_hpc <- preProcess(original_data[, "interesting"], method = c("knnImpute"))
+
+transformed <- predict(pp_hpc, newdata = original_data[, "interesting"])
+
 gbm_fit <- gbm(interesting ~ ., 
                cv.folds = 2,
                # weights = train_data$weights,
                n.trees = 50,
-               data = original_data, 
+               data = train_data, 
                distribution = "multinomial",
                shrinkage = 0.1, 
                interaction.depth = 3, 
@@ -369,4 +379,17 @@ svm_predict[,4] <- (svm_predict1[,4] + svm_predict2[,4] + svm_predict3[,4])/3 # 
 svm_predict[,5] <- (svm_predict1[,5] + svm_predict2[,5] + svm_predict3[,5])/3 # + svm_predict4$5)/4
 
 table(test_set$interesting, svm_predict)
+
+# notes 
+# problem
+# objective
+# correlation - get rid of the redundant variables
+# matching ids and predicting the missing variables 
+# weekday weekend
+# morning afternoon 
+# log loss - figure out what this is and how to get it down 
+# imputation in the caret package 
+# upsampling the data 
+
+
 
