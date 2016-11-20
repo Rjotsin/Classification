@@ -17,12 +17,12 @@ sample_data <- read.csv(SAMPLE_DATA_PATH,
                           sep=",", 
                           stringsAsFactors=F)
 
-original_data <- read.csv(TRAIN_DATA_PATH, 
+original_train_data <- read.csv(TRAIN_DATA_PATH, 
                           header=TRUE, 
                           sep=",", 
                           stringsAsFactors=F)
 
-test_data <- read.csv(TEST_DATA_PATH, 
+original_test_data <- read.csv(TEST_DATA_PATH, 
                           header=TRUE, 
                           sep=",", 
                           stringsAsFactors=F)
@@ -37,6 +37,11 @@ colnames(avars_data) <- c("id","gender","position","year_birth","age_member","ag
   "gross_monthly_income_imputed","net_monthly_income","net_monthly_income_capped","net_monthly_income_imputed",
   "gross_monthly_income_cat","net_monthly_income_cat","gross_household_income","net_household_income",
   "edu","edu_diploma","edu_cat","is_member","recruitment","origin","have_simPC")
+
+logLoss <- function(pred, actual){
+  -1*mean(log(pred[model.matrix(~ actual + 0) - pred > 0]))
+}
+
 
 f_measure <- function(data_frame){
   tp <- 0
@@ -79,17 +84,13 @@ cleanup <- function(data_frame, test = FALSE){
     data_frame$clear <- as.factor(data_frame$clear)
     data_frame$thinking <- as.factor(data_frame$thinking)
     data_frame$enjoy <- as.factor(data_frame$enjoy)
+    data_frame$obs <- NULL
   }
 
   data_frame$year <- as.factor(substr(data_frame$year_month_m,0,4))
   data_frame$month <- as.factor(substr(data_frame$year_month_m,5,6))
   data_frame[data_frame$core == "",]$core <- "leisure"
   data_frame$core <- as.factor(data_frame$core)
-  # data_frame$duration_cat <- 4
-  # data_frame[data_frame$duration <= 1643,]$duration_cat <- 3
-  # data_frame[data_frame$duration <= 1061,]$duration_cat <- 2
-  # data_frame[data_frame$duration <= 720,]$duration_cat <- 1
-  # data_frame$duration_cat <- as.factor(data_frame$duration_cat)
 
   start_dates <- parse_datetimes(data_frame,"-", "startdate")
   start_dates[[3]] <- unlist(lapply(1:nrow(data_frame), function(x) if(start_dates[[3]][x] == "08"){start_dates[[3]][x] <- "2008"} else {start_dates[[3]][x]}))
@@ -112,18 +113,14 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$start_hr <- as.factor(as.numeric(start_times[[1]]))
   data_frame$start_min <- as.factor(as.numeric(start_times[[2]]))
   data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
-  data_frame$start_hr_min <- paste(data_frame$start_hr,data_frame$start_min,sep=":")
-  data_frame[data_frame$start_hr_min == "NA:NA",]$start_hr_min <- NA
-  data_frame$start_hr_min <- as.factor(data_frame$start_hr_min)
+  data_frame$start_am <- as.factor(as.numeric(data_frame$start_hr) < 12)
 
   end_times <- parse_datetimes(data_frame,":","endtime")
 
   data_frame$end_hr <- as.factor(as.numeric(end_times[[1]]))
   data_frame$end_min <- as.factor(as.numeric(end_times[[2]]))
   data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
-  data_frame$end_hr_min <- paste(data_frame$end_hr,data_frame$end_min,sep=":")
-  data_frame[data_frame$end_hr_min == "NA:NA",]$end_hr_min <- NA
-  data_frame$end_hr_min <- as.factor(data_frame$end_hr_min)
+  data_frame$end_am <- as.factor(as.numeric(data_frame$end_hr) < 12)
 
   new_start <- unlist(lapply(1:nrow(data_frame), function(x) paste(start_dates[[1]][x],"-",start_dates[[2]][x],"-",start_dates[[3]][x],sep="")))
   new_end <- unlist(lapply(1:nrow(data_frame), function(x) paste(end_dates[[1]][x],"-",end_dates[[2]][x],"-",end_dates[[3]][x],sep="")))
@@ -132,8 +129,6 @@ cleanup <- function(data_frame, test = FALSE){
 
   data_frame$startdate_epoch <- floor(as.integer(as.POSIXct(data_frame$startdate, format = "%d-%M-%Y"))/86400)
   data_frame$enddate_epoch <- floor(as.integer(as.POSIXct(data_frame$enddate, format = "%d-%M-%Y"))/86400)
-  # data_frame$sameday <- as.factor(as.integer(data_frame$startdate == data_frame$enddate))
-  # data_frame$delta_days <- data_frame$enddate_epoch - data_frame$startdate_epoch
   
   count_table <- as.data.frame(table(data_frame$id))
   colnames(count_table) <- c("id","num_surveys")
@@ -145,9 +140,6 @@ cleanup <- function(data_frame, test = FALSE){
   # core_table_wide <- dcast(core_table,formula = id~core,value.var="freq")
   core_table_wide <- dcast(core_table,formula = Var1~Var2,value.var="Freq")
   colnames(core_table_wide) <- c("id","num_health","num_income","num_leisure")
-  # core_table_wide[is.na(core_table_wide$num_health),]$num_health <- 0
-  # core_table_wide[is.na(core_table_wide$num_income),]$num_income <- 0
-  # core_table_wide[is.na(core_table_wide$num_leisure),]$num_leisure <- 0
   
   data_frame <- merge(data_frame, core_table_wide, all.x = TRUE,by = "id")
   
@@ -192,19 +184,18 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame <- merge(data_frame, duration_means, all.x = TRUE,by = "id")
 
   factors <- c("gender","position","year_birth","age_member","age_cat","age_head","num_members", "num_children","partner","civil_status",
-             "dom_sit","dwell_type","urban_char","occ", "gross_monthly_income_cat","net_monthly_income_cat", "edu","edu_diploma",
-             "edu_cat","is_member","recruitment","origin","have_simPC")
+            "dom_sit","dwell_type","urban_char","occ", "gross_monthly_income_cat","net_monthly_income_cat", "edu","edu_diploma",
+            "edu_cat","is_member","recruitment","origin","have_simPC")
          
   combined <- merge(x=data_frame,y=avars_data,by="id",all.x=TRUE)
   combined_clean <- combined
   # combined_clean$id <- NULL
   # combined_clean$interesting <- NULL
-  combined_clean$difficult <- NULL
-  combined_clean$clear <- NULL
-  combined_clean$thinking <- NULL
-  combined_clean$enjoy <- NULL
+  # combined_clean$difficult <- NULL
+  # combined_clean$clear <- NULL
+  # combined_clean$thinking <- NULL
+  # combined_clean$enjoy <- NULL
   combined_clean$train <- NULL
-  # combined_clean$obs <- NULL
   combined_clean$year_month_m <- as.factor(combined_clean$year_month_m)
   combined_clean$startdate <- as.factor(combined_clean$startdate)
   combined_clean$enddate <- as.factor(combined_clean$enddate)
@@ -216,65 +207,110 @@ cleanup <- function(data_frame, test = FALSE){
   for (i in 1:length(factors)) {
     combined_clean[,factors[i]] <- as.factor(combined_clean[,factors[i]])
   }   
+  
+  combined_clean <- subset(combined_clean, select=-c(gross_monthly_income,net_monthly_income,net_monthly_income_capped))
 
   return(combined_clean)
 
 }
 
+get_means <- function(data_frame){
+  data_frame_enjoy <- data_frame %>% group_by(id) %>% summarise(enjoy_mean=floor(mean(as.numeric(enjoy))))
+  data_frame_difficult <- data_frame %>% group_by(id) %>% summarise(difficult_mean=floor(mean(as.numeric(difficult))))
+  data_frame_thinking <- data_frame %>% group_by(id) %>% summarise(thinking_mean=floor(mean(as.numeric(thinking))))
+  data_frame_clear <- data_frame %>% group_by(id) %>% summarise(clear_mean=floor(mean(as.numeric(clear))))
+  data_frame_interesting <- data_frame %>% group_by(id) %>% summarise(interesting_mean=floor(mean(as.numeric(interesting))))
+
+  data_frame <- merge(x=data_frame,y=data_frame_enjoy,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_difficult,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_thinking,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_clear,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_interesting,by="id")
+
+  data_frame <- subset(data_frame, select=-c(enjoy,thinking,clear,difficult))
+
+  return(data_frame)
+}
+
+subset_train <- function(data_frame){
+  # TESTING ON OUR KNOWN DATA
+  train_percentage <- 0.8
+  train_index <- sample(1:nrow(data_frame), floor(nrow(data_frame)*train_percentage))
+  train_data <- data_frame[train_index, ]
+  row.names(train_data) <- NULL
+
+  test_set <- data_frame[-train_index, ]
+  test_index <- as.numeric(row.names(test_set))
+  row.names(test_set) <- NULL
+
+  train_data <- get_means(train_data)
+  train_data$id <- as.factor(train_data$id)
+  
+  test_set$id <- as.factor(test_set$id)
+  test_set <- subset(test_set, select=-c(enjoy,thinking,clear,difficult))
+  test_set <- merge(x=test_set, 
+                     y=unique(train_data[,c("id","thinking_mean","enjoy_mean","difficult_mean","clear_mean","interesting_mean")]),
+                     by="id",
+                     all.x=TRUE)
+
+  data <- list(train_data, test_set)
+
+  return(data)
+}
+
+# CLEANING UP THE TRAIN_DATA
 # think about grouping by id
 # how many surveys have they done
 # how many surveys have they done up to that point 
 # average duration 
-original_data <- cleanup(original_data, test=FALSE)
-original_data$obs <- NULL
-original_data$id <- NULL
+train_data <- cleanup(original_train_data, test=FALSE)
+train_data$obs <- NULL
 
-nums <- sapply(original_data, is.numeric)
-ints <- sapply(original_data, is.integer)
+# GETTING THE MEANS BY ID - THIS MADE THE BIGGEST DIFFERENCE
+train_data <- get_means(train_data)
+
+# TRYING TO IMPUTE THE TRAIN DATA
+# library(mice)
+
+# nums_og <- sapply(data_frame, is.numeric)
+# ints_og <- sapply(data_frame, is.integer)
+# temp_data_og <- original_data[,nums_og|ints_og]
+# temp_data_og$startdate_epoch <- NULL
+# temp_data_og$enddate_epoch <- NULL
+# transform_og <- mice(temp_data_og,m=2,maxit=1,meth="rf")
+# completed_data_og <- complete(transform_og,1)
+# og_temp <- original_data[ , -which(names(original_data) %in% colnames(completed_data_og))]
+# imputed_data_og <- cbind(completed_data_og, og_temp)
 
 # original_data <- upSample(original_data, original_data$interesting)
 
-test_data <- cleanup(test_data, test=TRUE)
+# CLEANING UP THE TEST_DATA
+test_data <- cleanup(original_test_data, test=TRUE)
+test_data <- merge(x=test_data, 
+                   y=unique(train_data[,c("id","thinking_mean","enjoy_mean","difficult_mean","clear_mean","interesting_mean")]),
+                   by="id",
+                   all.x=TRUE)
+
+# TRYING TO IMPUTE THE TEST DATA
+# nums <- sapply(test_data, is.numeric)
+# ints <- sapply(test_data, is.integer)
+
+# temp_data_test <- test_data[,nums|ints]
+# temp_data_test$obs <- NULL
+# temp_data_test$id <- NULL
+# temp_data_test$startdate_epoch <- NULL
+# temp_data_test$enddate_epoch <- NULL
+# transform_test <- mice(temp_data_test,m=2,maxit=1,meth="rf")
+# completed_data_test <- complete(transform_test,1)
+# test_temp <- test_data[ , -which(names(test_data) %in% colnames(completed_data_test))]
+# imputed_data_test <- cbind(completed_data_test, test_temp)
 
 # > table(original_data$interesting)
 
 #     1     2     3     4     5 
-#  4079  7748 30086 24117 14262 
-
-# Looking at addressing the imbalance issue
-
-# one <- (original_data[original_data$interesting == 1,])
-# one_index <- sample(1:nrow(one), 4079)
-# one <- one[one_index,]
-
-# two <- (original_data[original_data$interesting == 2,])
-# two_index <- sample(1:nrow(two), 6000)
-# two <- two[two_index,]
-
-# three <- (original_data[original_data$interesting == 3,])
-# three_index <- sample(1:nrow(three), 6000)
-# three <- three[three_index,]
-
-# four <- (original_data[original_data$interesting == 4,])
-# four_index <- sample(1:nrow(four), 6000)
-# four <- four[four_index,]
-
-# five <- (original_data[original_data$interesting == 5,])
-# five_index <- sample(1:nrow(five), 6000)
-# five <- five[five_index,]
-
-# balanced <- rbind(one,two,three,four,five)	   
-
-train_percentage <- 0.8
-train_index <- sample(1:nrow(original_data), floor(nrow(original_data)*train_percentage))
-train_data <- original_data[train_index, ]
-row.names(train_data) <- NULL
-
-test_set <- original_data[-train_index, ]
-test_index <- as.numeric(row.names(test_set))
-row.names(test_set) <- NULL
+#  4079  7748 30086 24117 14262  
 			   
-# Boosting
+# BOOSTING
 library(gbm)
 library(caret)
 
@@ -295,10 +331,6 @@ gbmFit1 <- train(interesting ~ .,
 
 boosting_results <- resamples(list(gbm = gbmFit1,gbm = gbmFit1))
 
-pp_hpc <- preProcess(original_data[, "interesting"], method = c("knnImpute"))
-
-transformed <- predict(pp_hpc, newdata = original_data[, "interesting"])
-
 gbm_fit <- gbm(interesting ~ ., 
                cv.folds = 2,
                # weights = train_data$weights,
@@ -312,16 +344,19 @@ gbm_fit <- gbm(interesting ~ .,
 best.iter <- gbm.perf(gbm_fit,method="OOB")
 best.iter <- gbm.perf(gbm_fit,method="cv")
 
+# GETTING PREDICTIONS
 gbm_predict_prob <- as.data.frame(predict.gbm(gbm_fit, test_data, n.trees=best.iter, type="response"))
 gbm_predict <- cbind(test_data$obs,gbm_predict_prob)
 colnames(gbm_predict) <- c("obs","interesting1","interesting2","interesting3","interesting4","interesting5")
 
-write.table (gbm_predict, col.names=T, row.names=F, quote=F, sep=",", file="sumbission.csv")
+write.table (gbm_predict, col.names=T, row.names=F, quote=F, sep=",", file="sumbission5.csv")
 
 gbm_predict_guesses <- as.factor(max.col(gbm_predict_prob))
 # Getting confusion matrix and f-measure
-cm <- table(test_set$interesting, gbm_predict)
+cm <- table(test_set$interesting, gbm_predict_guesses)
 f_boost <- f_measure(cm)
+
+ll <- logLoss(gbm_predict_prob, test_set$interesting)
 
 # SVM
 library(e1071)
