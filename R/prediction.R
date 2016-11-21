@@ -84,7 +84,7 @@ cleanup <- function(data_frame, test = FALSE){
     data_frame$clear <- as.factor(data_frame$clear)
     data_frame$thinking <- as.factor(data_frame$thinking)
     data_frame$enjoy <- as.factor(data_frame$enjoy)
-    data_frame$obs <- NULL
+    # data_frame$obs <- NULL
   }
 
   data_frame$year <- as.factor(substr(data_frame$year_month_m,0,4))
@@ -189,12 +189,6 @@ cleanup <- function(data_frame, test = FALSE){
          
   combined <- merge(x=data_frame,y=avars_data,by="id",all.x=TRUE)
   combined_clean <- combined
-  # combined_clean$id <- NULL
-  # combined_clean$interesting <- NULL
-  # combined_clean$difficult <- NULL
-  # combined_clean$clear <- NULL
-  # combined_clean$thinking <- NULL
-  # combined_clean$enjoy <- NULL
   combined_clean$train <- NULL
   combined_clean$year_month_m <- as.factor(combined_clean$year_month_m)
   combined_clean$startdate <- as.factor(combined_clean$startdate)
@@ -202,7 +196,6 @@ cleanup <- function(data_frame, test = FALSE){
   combined_clean$starttime <- NULL
   combined_clean$endtime <- NULL
   combined_clean$core <- as.factor(combined_clean$core)
-  # combined_clean$weights <- 1/5
 
   for (i in 1:length(factors)) {
     combined_clean[,factors[i]] <- as.factor(combined_clean[,factors[i]])
@@ -215,11 +208,11 @@ cleanup <- function(data_frame, test = FALSE){
 }
 
 get_means <- function(data_frame){
-  data_frame_enjoy <- data_frame %>% group_by(id) %>% summarise(enjoy_mean=floor(mean(as.numeric(enjoy))))
-  data_frame_difficult <- data_frame %>% group_by(id) %>% summarise(difficult_mean=floor(mean(as.numeric(difficult))))
-  data_frame_thinking <- data_frame %>% group_by(id) %>% summarise(thinking_mean=floor(mean(as.numeric(thinking))))
-  data_frame_clear <- data_frame %>% group_by(id) %>% summarise(clear_mean=floor(mean(as.numeric(clear))))
-  data_frame_interesting <- data_frame %>% group_by(id) %>% summarise(interesting_mean=floor(mean(as.numeric(interesting))))
+  data_frame_enjoy <- data_frame %>% group_by(id) %>% summarise(enjoy_mean=as.factor(round(mean(as.numeric(enjoy)))))
+  data_frame_difficult <- data_frame %>% group_by(id) %>% summarise(difficult_mean=as.factor(round(mean(as.numeric(difficult)))))
+  data_frame_thinking <- data_frame %>% group_by(id) %>% summarise(thinking_mean=as.factor(round(mean(as.numeric(thinking)))))
+  data_frame_clear <- data_frame %>% group_by(id) %>% summarise(clear_mean=as.factor(round(mean(as.numeric(clear)))))
+  data_frame_interesting <- data_frame %>% group_by(id) %>% summarise(interesting_mean=as.factor(round(mean(as.numeric(interesting)))))
 
   data_frame <- merge(x=data_frame,y=data_frame_enjoy,by="id")
   data_frame <- merge(x=data_frame,y=data_frame_difficult,by="id")
@@ -233,27 +226,33 @@ get_means <- function(data_frame){
 }
 
 subset_train <- function(data_frame){
+
+  data_frame <- cleanup(data_frame, test=FALSE)
+
   # TESTING ON OUR KNOWN DATA
   train_percentage <- 0.8
   train_index <- sample(1:nrow(data_frame), floor(nrow(data_frame)*train_percentage))
   train_data <- data_frame[train_index, ]
   row.names(train_data) <- NULL
 
-  test_set <- data_frame[-train_index, ]
-  test_index <- as.numeric(row.names(test_set))
-  row.names(test_set) <- NULL
+  test_data <- data_frame[-train_index, ]
+  test_index <- as.numeric(row.names(test_data))
+  row.names(test_data) <- NULL
 
   train_data <- get_means(train_data)
   train_data$id <- as.factor(train_data$id)
   
-  test_set$id <- as.factor(test_set$id)
-  test_set <- subset(test_set, select=-c(enjoy,thinking,clear,difficult))
-  test_set <- merge(x=test_set, 
+  test_data$id <- as.factor(test_data$id)
+  test_data <- subset(test_data, select=-c(enjoy,thinking,clear,difficult))
+  test_data <- merge(x=test_data, 
                      y=unique(train_data[,c("id","thinking_mean","enjoy_mean","difficult_mean","clear_mean","interesting_mean")]),
                      by="id",
                      all.x=TRUE)
+  
+  train_data$id <- NULL
+  train_data$obs <- NULL
 
-  data <- list(train_data, test_set)
+  data <- list(train_data, test_data)
 
   return(data)
 }
@@ -292,6 +291,11 @@ test_data <- merge(x=test_data,
                    all.x=TRUE)
 
 # TRYING TO IMPUTE THE TEST DATA
+# test_data$thinking_mean <- as.numeric(test_data$thinking_mean)
+# test_data$enjoy_mean <- as.numeric(test_data$enjoy_mean)
+# test_data$difficult_mean <- as.numeric(test_data$difficult_mean)
+# test_data$clear_mean <- as.numeric(test_data$clear_mean)
+# test_data$interesting_mean <- as.numeric(test_data$interesting_mean)
 # nums <- sapply(test_data, is.numeric)
 # ints <- sapply(test_data, is.integer)
 
@@ -304,6 +308,17 @@ test_data <- merge(x=test_data,
 # completed_data_test <- complete(transform_test,1)
 # test_temp <- test_data[ , -which(names(test_data) %in% colnames(completed_data_test))]
 # imputed_data_test <- cbind(completed_data_test, test_temp)
+
+# test_data$thinking_mean <- as.factor(test_data$thinking_mean)
+# test_data$enjoy_mean <- as.factor(test_data$enjoy_mean)
+# test_data$difficult_mean <- as.factor(test_data$difficult_mean)
+# test_data$clear_mean <- as.factor(test_data$clear_mean)
+# test_data$interesting_mean <- as.factor(test_data$interesting_mean)
+
+# SUBSETTING THE TRAIN_DATA
+train_list <- subset_train(original_train_data)
+train_data <- train_list[[1]]
+test_data <- train_list[[2]]
 
 # > table(original_data$interesting)
 
@@ -331,6 +346,100 @@ gbmFit1 <- train(interesting ~ .,
 
 boosting_results <- resamples(list(gbm = gbmFit1,gbm = gbmFit1))
 
+difficult_gbm_fit <- gbm(difficult_mean ~ ., 
+               cv.folds = 2,
+               # weights = train_data$weights,
+               n.trees = 65,
+               data = train_data[,-3], 
+               distribution = "multinomial",
+               shrinkage = 0.1, 
+               interaction.depth = 3, 
+               n.minobsinnode = 10)
+
+best.iter <- gbm.perf(difficult_gbm_fit,method="OOB")
+best.iter <- gbm.perf(difficult_gbm_fit,method="cv")
+
+difficult_gbm_predict_prob <- as.data.frame(predict.gbm(difficult_gbm_fit, test_data, n.trees=best.iter, type="response"))
+difficult_gbm_predict_guesses <- as.factor(max.col(difficult_gbm_predict_prob))
+
+thinking_gbm_fit <- gbm(thinking_mean ~ ., 
+               cv.folds = 2,
+               # weights = train_data$weights,
+               n.trees = 50,
+               data = train_data[,-3], 
+               distribution = "multinomial",
+               shrinkage = 0.1, 
+               interaction.depth = 3, 
+               n.minobsinnode = 10)
+
+best.iter <- gbm.perf(thinking_gbm_fit,method="OOB")
+best.iter <- gbm.perf(thinking_gbm_fit,method="cv")
+
+thinking_gbm_predict_prob <- as.data.frame(predict.gbm(thinking_gbm_fit, test_data, n.trees=best.iter, type="response"))
+thinking_gbm_predict_guesses <- as.factor(max.col(thinking_gbm_predict_prob))
+
+clear_gbm_fit <- gbm(clear_mean ~ ., 
+               cv.folds = 2,
+               # weights = train_data$weights,
+               n.trees = 50,
+               data = train_data[,-3], 
+               distribution = "multinomial",
+               shrinkage = 0.1, 
+               interaction.depth = 3, 
+               n.minobsinnode = 10)
+
+best.iter <- gbm.perf(clear_gbm_fit,method="OOB")
+best.iter <- gbm.perf(clear_gbm_fit,method="cv")
+
+clear_gbm_predict_prob <- as.data.frame(predict.gbm(clear_gbm_fit, test_data, n.trees=best.iter, type="response"))
+clear_gbm_predict_guesses <- as.factor(max.col(clear_gbm_predict_prob))
+
+enjoy_gbm_fit <- gbm(enjoy_mean ~ ., 
+               cv.folds = 2,
+               # weights = train_data$weights,
+               n.trees = 50,
+               data = train_data[,-3], 
+               distribution = "multinomial",
+               shrinkage = 0.1, 
+               interaction.depth = 3, 
+               n.minobsinnode = 10)
+
+best.iter <- gbm.perf(enjoy_gbm_fit,method="OOB")
+best.iter <- gbm.perf(enjoy_gbm_fit,method="cv")
+
+enjoy_gbm_predict_prob <- as.data.frame(predict.gbm(enjoy_gbm_fit, test_data, n.trees=best.iter, type="response"))
+enjoy_gbm_predict_guesses <- as.factor(max.col(enjoy_gbm_predict_prob))
+
+interesting_gbm_fit <- gbm(interesting_mean ~ ., 
+               cv.folds = 2,
+               # weights = train_data$weights,
+               n.trees = 70,
+               data = train_data[,-3], 
+               distribution = "multinomial",
+               shrinkage = 0.1, 
+               interaction.depth = 3, 
+               n.minobsinnode = 10)
+
+best.iter <- gbm.perf(interesting_gbm_fit,method="OOB")
+best.iter <- gbm.perf(interesting_gbm_fit,method="cv")
+
+interesting_gbm_predict_prob <- as.data.frame(predict.gbm(interesting_gbm_fit, test_data, n.trees=best.iter, type="response"))
+interesting_gbm_predict_guesses <- as.factor(max.col(interesting_gbm_predict_prob))
+
+test_data$difficult_pred <- difficult_gbm_predict_guesses
+test_data$thinking_pred <- thinking_gbm_predict_guesses
+test_data$clear_pred <- clear_gbm_predict_guesses
+test_data$enjoy_pred <- enjoy_gbm_predict_guesses
+test_data$interesting_pred <- interesting_gbm_predict_guesses
+
+test_data[is.na(test_data$thinking_mean),]$thinking_mean <- test_data[is.na(test_data$thinking_mean),]$thinking_pred
+test_data[is.na(test_data$difficult_mean),]$difficult_mean <- test_data[is.na(test_data$difficult_mean),]$difficult_pred
+test_data[is.na(test_data$enjoy_mean),]$enjoy_mean <- test_data[is.na(test_data$enjoy_mean),]$enjoy_pred
+test_data[is.na(test_data$clear_mean),]$clear_mean <- test_data[is.na(test_data$clear_mean),]$clear_pred
+test_data[is.na(test_data$interesting_mean),]$interesting_mean <- test_data[is.na(test_data$interesting_mean),]$interesting_pred
+
+test_data <- subset(test_data, select=-c(difficult_pred,thinking_pred,clear_pred,enjoy_pred,interesting_pred))
+
 gbm_fit <- gbm(interesting ~ ., 
                cv.folds = 2,
                # weights = train_data$weights,
@@ -344,6 +453,10 @@ gbm_fit <- gbm(interesting ~ .,
 best.iter <- gbm.perf(gbm_fit,method="OOB")
 best.iter <- gbm.perf(gbm_fit,method="cv")
 
+par(las=2) # make label perpendicular to axis
+par(mar=c(5,8,4,2)) # increase y-axis margin.
+summary(gbm_fit, cBars = 10)
+
 # GETTING PREDICTIONS
 gbm_predict_prob <- as.data.frame(predict.gbm(gbm_fit, test_data, n.trees=best.iter, type="response"))
 gbm_predict <- cbind(test_data$obs,gbm_predict_prob)
@@ -352,11 +465,13 @@ colnames(gbm_predict) <- c("obs","interesting1","interesting2","interesting3","i
 write.table (gbm_predict, col.names=T, row.names=F, quote=F, sep=",", file="sumbission5.csv")
 
 gbm_predict_guesses <- as.factor(max.col(gbm_predict_prob))
-# Getting confusion matrix and f-measure
-cm <- table(test_set$interesting, gbm_predict_guesses)
+
+# GETTING CONFUSION MATRIX AND F-MEASURE
+cm <- table(test_data$interesting, gbm_predict_guesses)
 f_boost <- f_measure(cm)
 
-ll <- logLoss(gbm_predict_prob, test_set$interesting)
+# GETTING LOG LOSS VALUE
+ll <- logLoss(gbm_predict_prob, test_data$interesting)
 
 # SVM
 library(e1071)
@@ -368,6 +483,16 @@ train_2 <- train_data[which(folds == 2),]
 train_3 <- train_data[which(folds == 3),]
 train_4 <- train_data[which(folds == 4),]
 # train_5 <- train_data[which(folds == 5),]
+
+svm_test <- svm(difficult_mean ~ ., data = test_data, kernel = "linear")
+svm_pred <- predict(svm_test, sample_data)
+
+svm_test <- ksvm(interesting_mean~.,
+           data=test_data,
+           type="C-bsvc",
+           kernel=polydot(degree = 2),
+           C=5,
+           prob.model = TRUE)
 
 s1 <- ksvm(interesting~.,
            data=train_1,
@@ -400,6 +525,8 @@ s4 <- ksvm(interesting~.,
 #            C=5,
 #            prob.model = TRUE)
 
+svm_predict <- as.data.frame(predict(svm_test, test_data[,-66], type = "probabilities"))
+
 svm_predict1 <- as.data.frame(predict(s1, test_set[,-2], type = "probabilities"))
 svm_predict2 <- as.data.frame(predict(s2, test_set[,-2], type = "probabilities"))
 svm_predict3 <- as.data.frame(predict(s3, test_set[,-2], type = "probabilities"))
@@ -415,7 +542,7 @@ svm_predict[,5] <- (svm_predict1[,5] + svm_predict2[,5] + svm_predict3[,5])/3 # 
 
 table(test_set$interesting, svm_predict)
 
-# notes 
+# NOTES 
 # problem
 # objective
 # correlation - get rid of the redundant variables
@@ -425,6 +552,7 @@ table(test_set$interesting, svm_predict)
 # log loss - figure out what this is and how to get it down 
 # imputation in the caret package 
 # upsampling the data 
-
-
-
+# impute the means
+# think of another way to get those columns in there
+# f 0.53(imputed)
+# ll 1.18(imputed), 1.2(floor), 1.17(round)
