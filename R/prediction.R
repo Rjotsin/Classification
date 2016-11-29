@@ -270,10 +270,10 @@ subset_train <- function(data_frame){
 scale_data <- function(data_frame, test = FALSE)
 {
   data_frame$duration <- log(data_frame$duration)
-  data_frame$gross_monthly_income_imputed <- log(data_frame$gross_monthly_income_imputed + 0.1)
-  data_frame$net_monthly_income_imputed <- log(data_frame$net_monthly_income_imputed + 0.1)
-  data_frame$gross_household_income <- log(data_frame$gross_household_income + 0.1)
-  data_frame$net_household_income <- log(data_frame$net_household_income + 0.1)
+  data_frame$gross_monthly_income_imputed <- log(data_frame$gross_monthly_income_imputed + 1)
+  data_frame$net_monthly_income_imputed <- log(data_frame$net_monthly_income_imputed + 1)
+  data_frame$gross_household_income <- log(data_frame$gross_household_income + 1)
+  data_frame$net_household_income <- log(data_frame$net_household_income + 1)
 
   nums_og_train <- sapply(data_frame, is.numeric)
   ints_og_train <- sapply(data_frame, is.integer)
@@ -379,11 +379,12 @@ train_data <- train_list[[1]]
 train_data <- scale_data(train_data, test=FALSE)
 
 # train_imp_data <- subset(train_data, select = c(num_surveys, core, gross_monthly_income_imputed, net_monthly_income_imputed, interesting_mean ,start_day, start_month, end_day, end_month, enjoy_mean ,thinking_mean, difficult_mean, clear_mean ,duration))
-# train_imp <- missForest(train_imp_data, verbose = TRUE, maxiter = 1)
+train_imp_data <- subset(train_data, select = c(interesting_mean , enjoy_mean ,thinking_mean, difficult_mean, clear_mean ,duration))
+train_imp <- missForest(train_imp_data, verbose = TRUE, maxiter = 1)
 
-# train_imp_data <- train_imp[[1]]
-# train_temp <- train_data[ , -which(names(train_data) %in% colnames(train_imp_data))]
-# train_data <- cbind(train_temp, train_imp_data)
+train_imp_data <- train_imp[[1]]
+train_temp <- train_data[ , -which(names(train_data) %in% colnames(train_imp_data))]
+train_data <- cbind(train_temp, train_imp_data)
 
 # train_data <- upSample(train_data, train_data$interesting)
 # train_data$Class <- NULL
@@ -413,7 +414,7 @@ train_data <- pca_data_train
 test_data <- train_list[[2]]
 test_data <- scale_data(test_data, test=TRUE)
 
-test_imp_data <- subset(test_data, select = c(num_surveys, core, gross_monthly_income_imputed, net_monthly_income_imputed, interesting_mean ,start_day, start_month, end_day, end_month, enjoy_mean ,thinking_mean, difficult_mean, clear_mean ,duration))
+test_imp_data <- subset(test_data, select = c(interesting_mean , enjoy_mean ,thinking_mean, difficult_mean, clear_mean ,duration))
 test_imp <- missForest(test_imp_data, verbose = TRUE, maxiter = 1)
 
 test_imp_data <- test_imp[[1]]
@@ -445,7 +446,49 @@ test_data <- pca_data_test
 
 #     1     2     3     4     5 
 #  4079  7748 30086 24117 14262  
+
+# RANDOM FOREST
+library(doMC)
+library(randomForest)
+library(caret)
+
+registerDoMC(4)
+train_data$startdate <- NULL
+train_data$enddate <- NULL
+interesting <- as.integer(train_data$interesting)
+
+train_data$interesting <- NULL
+
+for (i in 1:length(interesting)) {
+  interesting[i] = paste("interesting",interesting[i], sep = "")
+}
+
+interesting <- as.factor(interesting)
+
+train_data <- cbind(train_data, interesting)
+control <- trainControl(method="none", classProbs = TRUE, summaryFunction = multiClassSummary, allowParallel = TRUE)
+
+library(parallel)
+library(doParallel)
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+ptm <- proc.time()
+rf <- train(interesting ~ ., data = train_data[1:5000,], method="rf", trControl=control, tuneGrid = data.frame(mtry = 68), na.action = na.roughfix)
+proc.time() - ptm
+stopCluster(cl)
+
+predrf <- as.data.frame(predict(rf, newdata = test_data, na.action = na.roughfix, type = "prob"))
+
+logLoss(predrf, test_data$interesting)
+
+darkAndScaryForest <- foreach(ntree=rep(200, 2), .combine=combine, .multicombine=TRUE, .packages='randomForest') %dopar% {
+  rf <- randomForest(interesting ~ interesting_mean + enjoy_mean + difficult_mean + clear_mean + thinking_mean + core + num_surveys + gross_monthly_income_imputed + net_monthly_income_imputed,
+                     train_data[1:30000,], ntree=ntree, norm.votes=FALSE)
+  model <- train(y ~ ., data = training, method = "rf")
+}
 			   
+h <- predict(darkAndScaryForest, test_data, type= "prob", na.action = na.roughfix)
+
 # BOOSTING
 library(gbm)
 library(caret)
@@ -509,6 +552,11 @@ ll_test[!is.na(ll_test[,5]),5] <- 1
 ll_test[!is.na(ll_test[,6]),6] <- 1
 ll_test[is.na(ll_test)] <- 0
 ll_test <- ll_test[,-1]
+ll_test[,1] <- as.integer(ll_test[,1])
+ll_test[,2] <- as.integer(ll_test[,2])
+ll_test[,3] <- as.integer(ll_test[,3])
+ll_test[,4] <- as.integer(ll_test[,4])
+ll_test[,5] <- as.integer(ll_test[,5])
 
 colnames(ll_test) <- c("interesting1","interesting2","interesting3","interesting4","interesting5")
 
@@ -638,4 +686,9 @@ means <- ggplot(means_data_frame, aes(x = factor(data_set), y = id_in_data, fill
 # smote
 # use the random forest imputation to get the means and other top variables
 # upsample the train data
-
+# random forest bag 1% 
+# dont impute the train data
+# different groups for the data 
+# first time respondants 
+# ensemble
+# categorize things?
