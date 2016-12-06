@@ -17,9 +17,30 @@ library(nnet)
 library(RCurl)
 set.seed(1017)
 
-original_train_data <- read.csv(file="combined.csv", na.strings=c(" ","NA"), stringsAsFactors = FALSE)
-original_test_data  <- read.csv(file="test.csv", header=T,  na.strings=c(" ","NA"), stringsAsFactors = FALSE)
-avars_data <- read.csv(file="avars1.csv", header=T,  na.strings=c(" ","NA"), stringsAsFactors = FALSE)
+TRAIN_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/combined.csv"
+TEST_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/test.csv"
+AVARS_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/avars1.csv"
+SAMPLE_DATA_PATH="/Users/josephlugo/Google Drive/School/4B/STAT 441/Group Project/sample_submission.csv"
+
+sample_data <- read.csv(SAMPLE_DATA_PATH, 
+                          header=TRUE, 
+                          sep=",", 
+                          stringsAsFactors=F)
+
+original_train_data <- read.csv(TRAIN_DATA_PATH, 
+                          header=TRUE, 
+                          sep=",", 
+                          stringsAsFactors=F)
+
+original_test_data <- read.csv(TEST_DATA_PATH, 
+                          header=TRUE, 
+                          sep=",", 
+                          stringsAsFactors=F)
+
+avars_data <- read.csv(AVARS_DATA_PATH, 
+                      header=TRUE, 
+                      sep=",", 
+                      stringsAsFactors=F)
 
 colnames(avars_data) <- c("id","gender","position","year_birth","age_member","age_cat","age_head","num_members",
                           "num_children","partner","civil_status","dom_sit","dwell_type","urban_char","occ","gross_monthly_income",
@@ -59,7 +80,7 @@ parse_datetimes <- function(data_frame, delimeter,col){
   
 }
 
-cleanup <- function(data_frame, test = FALSE, time = FALSE){
+cleanup <- function(data_frame, test = FALSE){
   
   if (test == FALSE){
     data_frame <- na.omit(data_frame)
@@ -90,23 +111,6 @@ cleanup <- function(data_frame, test = FALSE, time = FALSE){
   data_frame$end_day <- as.factor(as.numeric(end_dates[[1]]))
   data_frame$end_month <- as.factor(as.numeric(end_dates[[2]]))
   data_frame$end_year <- as.factor(as.numeric(end_dates[[3]]))
-
-  if (time = TRUE)
-  {
-     start_times <- parse_datetimes(data_frame,":","starttime")
-      
-     data_frame$start_hr <- as.factor(as.numeric(start_times[[1]]))
-     data_frame$start_min <- as.factor(as.numeric(start_times[[2]]))
-     data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
-     data_frame$start_am <- as.factor(as.numeric(data_frame$start_hr) < 12)
-      
-     end_times <- parse_datetimes(data_frame,":","endtime")
-      
-     data_frame$end_hr <- as.factor(as.numeric(end_times[[1]]))
-     data_frame$end_min <- as.factor(as.numeric(end_times[[2]]))
-     data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
-     data_frame$end_am <- as.factor(as.numeric(data_frame$end_hr) < 12)
-  }
   
   new_start <- unlist(lapply(1:nrow(data_frame), function(x) paste(start_dates[[1]][x],"-",start_dates[[2]][x],"-",start_dates[[3]][x],sep="")))
   new_end <- unlist(lapply(1:nrow(data_frame), function(x) paste(end_dates[[1]][x],"-",end_dates[[2]][x],"-",end_dates[[3]][x],sep="")))
@@ -176,9 +180,7 @@ cleanup <- function(data_frame, test = FALSE, time = FALSE){
   combined_clean$train <- NULL
   combined_clean$year_month_m <- as.factor(combined_clean$year_month_m)
   combined_clean$startdate <- as.factor(combined_clean$startdate)
-  combined_clean$enddate <- as.factor(combined_clean$enddate)
-  combined_clean$starttime <- NULL
-  combined_clean$endtime <- NULL
+  combined_clean$enddate <- as.factor(combined_clean$enddate)  
   combined_clean$core <- as.factor(combined_clean$core)
   
   for (i in 1:length(factors)) {
