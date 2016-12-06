@@ -31,7 +31,7 @@ gbm_preds <- function(train_list,test_list)
 
         gbm_fit3 <- gbm(interesting ~ ., 
                         cv.folds = 2,
-                        n.trees = 50,
+                        n.trees = 90,
                         data = train_list[[3]], 
                         distribution = "multinomial",
                         shrinkage = 0.1, 
@@ -48,7 +48,6 @@ gbm_preds <- function(train_list,test_list)
                         shrinkage = 0.1, 
                         interaction.depth = 3, 
                         n.minobsinnode = 10)
-
         best.iter4 <- gbm.perf(gbm_fit4,method="OOB")
         best.iter4 <- gbm.perf(gbm_fit4,method="cv")
 
@@ -72,6 +71,8 @@ gbm_preds <- function(train_list,test_list)
 
         return(list(pred_prob_list, gbm_predict_prob_final))
 }
+
+gbm_results <- gbm_preds(train_list, test_list)
 
 multnom_preds <- function(train_list, test_list)
     {
@@ -126,26 +127,6 @@ multnom_preds <- function(train_list, test_list)
         train4_mult$year_month_m <- NULL
 
         #train_data$interesting <-relevel(train_data$interesting, ref = "1")
-
-        control <- trainControl(method="repeatedcv", number=5, repeats=3, classProbs = TRUE, 
-                                summaryFunction = multiClassSummary, allowParallel = TRUE)
-
-        model1train <- train(interesting ~ .
-                       , data = train1_mult , method='multinom', metric="logLoss" ,linout=TRUE, trace = FALSE, trcontrol=control)
-
-        model1train
-        model2train <- train(interesting ~ .
-                        , data = train2_mult , method='multinom', metric="logLoss" ,linout=TRUE, trace = FALSE, trcontrol=control)
-
-        model2train
-        model3train <- train(interesting ~ .
-                        , data = train3_mult , method='multinom', metric="logLoss" ,linout=TRUE, trace = FALSE, trcontrol=control)
-
-        model3train
-        model4train <- train(interesting ~ .
-                        , data = train4_mult , method='multinom',metric="logLoss" ,linout=TRUE, trace = FALSE, trcontrol=control)
-
-        model4train
 
         control <- trainControl(method="none", classProbs = TRUE, summaryFunction = multiClassSummary, allowParallel=TRUE)
 

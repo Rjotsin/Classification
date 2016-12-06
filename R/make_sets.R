@@ -110,3 +110,7 @@ MakeSets <- function(train.df, test.df) {
   return(list(train_list, test_list))
 
 }
+
+all_sets <- MakeSets(newtrain, newtest)
+train_list <- all_sets[[1]]
+test_list <- all_sets[[2]]

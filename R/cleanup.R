@@ -181,6 +181,8 @@ cleanup <- function(data_frame, test = FALSE){
   combined_clean$year_month_m <- as.factor(combined_clean$year_month_m)
   combined_clean$startdate <- as.factor(combined_clean$startdate)
   combined_clean$enddate <- as.factor(combined_clean$enddate)  
+  combined_clean$starttime <- NULL
+  combined_clean$endtime <- NULL
   combined_clean$core <- as.factor(combined_clean$core)
   
   for (i in 1:length(factors)) {
