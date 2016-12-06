@@ -2,12 +2,23 @@ library(MASS)
 library(class)
 library(plyr)
 library(reshape2)
+library(dplyr)
+library(tidyr)
+library(chron)
+library(caret)
+library(e1071)
+library(gbm)
+library(MLmetrics)
+library(randomForest)
+library(foreach)
+library(parallel)
+library(doParallel)
+library(nnet)
+library(RCurl)
 set.seed(1017)
 
-setwd("U:/STAT441/Project/Data") #"C:/Users/Ridh/Desktop/4A-4B/STAT 441/Project/Linux Drive"
-
-original_data <- read.csv(file="combined.csv", na.strings=c(" ","NA"), stringsAsFactors = FALSE)
-test_data <- read.csv(file="test.csv", header=T,  na.strings=c(" ","NA"), stringsAsFactors = FALSE)
+original_train_data <- read.csv(file="combined.csv", na.strings=c(" ","NA"), stringsAsFactors = FALSE)
+original_test_data  <- read.csv(file="test.csv", header=T,  na.strings=c(" ","NA"), stringsAsFactors = FALSE)
 avars_data <- read.csv(file="avars1.csv", header=T,  na.strings=c(" ","NA"), stringsAsFactors = FALSE)
 
 colnames(avars_data) <- c("id","gender","position","year_birth","age_member","age_cat","age_head","num_members",
@@ -15,6 +26,24 @@ colnames(avars_data) <- c("id","gender","position","year_birth","age_member","ag
                           "gross_monthly_income_imputed","net_monthly_income","net_monthly_income_capped","net_monthly_income_imputed",
                           "gross_monthly_income_cat","net_monthly_income_cat","gross_household_income","net_household_income",
                           "edu","edu_diploma","edu_cat","is_member","recruitment","origin","have_simPC")
+
+f_measure <- function(data_frame){
+  tp <- 0
+  fp <- 0
+  fn <- 0
+  
+  for (i in 1:nrow(data_frame)){
+    tp <- tp + cm[i,i]
+    fp <- fp + sum(cm[, i])-cm[i, i]
+    fn <- fn + sum(cm[i,])-cm[i, i]
+  }
+  
+  precision <- tp/(tp+fp)
+  recall <- tp/(tp+fn)
+  f <- 2*(precision*recall)/(precision + recall)
+  
+  return(f)
+}
 
 parse_datetimes <- function(data_frame, delimeter,col){
   
@@ -30,7 +59,7 @@ parse_datetimes <- function(data_frame, delimeter,col){
   
 }
 
-cleanup <- function(data_frame, test = FALSE){
+cleanup <- function(data_frame, test = FALSE, time = FALSE){
   
   if (test == FALSE){
     data_frame <- na.omit(data_frame)
@@ -45,11 +74,6 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$month <- as.factor(substr(data_frame$year_month_m,5,6))
   data_frame[data_frame$core == "",]$core <- "leisure"
   data_frame$core <- as.factor(data_frame$core)
-  data_frame$duration_cat <- 4
-  data_frame[data_frame$duration <= 1643,]$duration_cat <- 3
-  data_frame[data_frame$duration <= 1061,]$duration_cat <- 2
-  data_frame[data_frame$duration <= 720,]$duration_cat <- 1
-  data_frame$duration_cat <- as.factor(data_frame$duration_cat)
   
   start_dates <- parse_datetimes(data_frame,"-", "startdate")
   start_dates[[3]] <- unlist(lapply(1:nrow(data_frame), function(x) if(start_dates[[3]][x] == "08"){start_dates[[3]][x] <- "2008"} else {start_dates[[3]][x]}))
@@ -66,18 +90,23 @@ cleanup <- function(data_frame, test = FALSE){
   data_frame$end_day <- as.factor(as.numeric(end_dates[[1]]))
   data_frame$end_month <- as.factor(as.numeric(end_dates[[2]]))
   data_frame$end_year <- as.factor(as.numeric(end_dates[[3]]))
-  
-  start_times <- parse_datetimes(data_frame,":","starttime")
-  
-  data_frame$start_hr <- as.factor(as.numeric(start_times[[1]]))
-  data_frame$start_min <- as.factor(as.numeric(start_times[[2]]))
-  data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
-  
-  end_times <- parse_datetimes(data_frame,":","endtime")
-  
-  data_frame$end_hr <- as.factor(as.numeric(end_times[[1]]))
-  data_frame$end_min <- as.factor(as.numeric(end_times[[2]]))
-  data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
+
+  if (time = TRUE)
+  {
+     start_times <- parse_datetimes(data_frame,":","starttime")
+      
+     data_frame$start_hr <- as.factor(as.numeric(start_times[[1]]))
+     data_frame$start_min <- as.factor(as.numeric(start_times[[2]]))
+     data_frame$start_sec <- as.factor(floor(as.numeric(start_times[[3]])))
+     data_frame$start_am <- as.factor(as.numeric(data_frame$start_hr) < 12)
+      
+     end_times <- parse_datetimes(data_frame,":","endtime")
+      
+     data_frame$end_hr <- as.factor(as.numeric(end_times[[1]]))
+     data_frame$end_min <- as.factor(as.numeric(end_times[[2]]))
+     data_frame$end_sec <- as.factor(floor(as.numeric(end_times[[3]])))
+     data_frame$end_am <- as.factor(as.numeric(data_frame$end_hr) < 12)
+  }
   
   new_start <- unlist(lapply(1:nrow(data_frame), function(x) paste(start_dates[[1]][x],"-",start_dates[[2]][x],"-",start_dates[[3]][x],sep="")))
   new_end <- unlist(lapply(1:nrow(data_frame), function(x) paste(end_dates[[1]][x],"-",end_dates[[2]][x],"-",end_dates[[3]][x],sep="")))
@@ -86,22 +115,53 @@ cleanup <- function(data_frame, test = FALSE){
   
   data_frame$startdate_epoch <- floor(as.integer(as.POSIXct(data_frame$startdate, format = "%d-%M-%Y"))/86400)
   data_frame$enddate_epoch <- floor(as.integer(as.POSIXct(data_frame$enddate, format = "%d-%M-%Y"))/86400)
-  data_frame$sameday <- as.factor(as.integer(data_frame$startdate == data_frame$enddate))
-  data_frame$delta_days <- data_frame$enddate_epoch - data_frame$startdate_epoch
   
   count_table <- as.data.frame(table(data_frame$id))
   colnames(count_table) <- c("id","num_surveys")
   data_frame <- merge(data_frame, count_table, all.x = TRUE,by = "id")
   
-  core_table <- count(data_frame, c("id","core"))
-  
-  core_table_wide <- dcast(core_table,formula = id~core,value.var="freq")
+  core_table <- as.data.frame(table(data_frame$id,data_frame$core))
+
+  core_table_wide <- dcast(core_table,formula = Var1~Var2,value.var="Freq")
   colnames(core_table_wide) <- c("id","num_health","num_income","num_leisure")
-  core_table_wide[is.na(core_table_wide$num_health),]$num_health <- 0
-  core_table_wide[is.na(core_table_wide$num_income),]$num_income <- 0
-  core_table_wide[is.na(core_table_wide$num_leisure),]$num_leisure <- 0
   
   data_frame <- merge(data_frame, core_table_wide, all.x = TRUE,by = "id")
+  
+  # Finding the number of surveys up to that point
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% mutate(past_surveys=0:(n()-1))
+  
+  # Finding the number of past surveys done for each core 
+  data_frame_leisure <- data_frame[data_frame$core == "leisure",]
+  data_frame_leisure$past_health_surveys <- NA
+  data_frame_leisure$past_income_surveys <- NA
+  data_frame_leisure <- data_frame_leisure %>% group_by(id) %>% mutate(past_leisure_surveys=0:(n()-1))
+  
+  data_frame_health <- data_frame[data_frame$core == "health",]
+  data_frame_health$past_leisure_surveys <- NA
+  data_frame_health$past_income_surveys <- NA
+  data_frame_health <- data_frame_health %>% group_by(id) %>% mutate(past_health_surveys=0:(n()-1))
+  
+  data_frame_income <- data_frame[data_frame$core == "income",]
+  data_frame_income$past_health_surveys <- NA
+  data_frame_income$past_leisure_surveys <- NA
+  data_frame_income <- data_frame_income %>% group_by(id) %>% mutate(past_income_surveys=0:(n()-1))
+  
+  data_frame <- rbind(data_frame_health, data_frame_income)
+  data_frame <- rbind(data_frame, data_frame_leisure)
+  
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% fill(past_leisure_surveys)
+  
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% fill(past_health_surveys)
+  
+  data_frame <- data_frame[with(data_frame, order(id,startdate_epoch)),]
+  data_frame <- data_frame %>% group_by(id) %>% fill(past_income_surveys)
+  
+  data_frame[is.na(data_frame$past_income_surveys),]$past_income_surveys <- 0
+  data_frame[is.na(data_frame$past_health_surveys),]$past_health_surveys <- 0
+  data_frame[is.na(data_frame$past_leisure_surveys),]$past_leisure_surveys <- 0
   
   duration_means <- ddply(data_frame,~id,summarise,mean=mean(duration))
   colnames(duration_means) <- c("id","duration_mean") 
@@ -112,36 +172,129 @@ cleanup <- function(data_frame, test = FALSE){
                "edu_cat","is_member","recruitment","origin","have_simPC")
   
   combined <- merge(x=data_frame,y=avars_data,by="id",all.x=TRUE)
-  # combined <- merge(x=balanced,y=avars_data,by="id",all.x=TRUE)
   combined_clean <- combined
-  # combined_clean$id <- NULL
-  # combined_clean$interesting <- NULL
-  combined_clean$difficult <- NULL
-  combined_clean$clear <- NULL
-  combined_clean$thinking <- NULL
-  combined_clean$enjoy <- NULL
   combined_clean$train <- NULL
-  # combined_clean$obs <- NULL
   combined_clean$year_month_m <- as.factor(combined_clean$year_month_m)
   combined_clean$startdate <- as.factor(combined_clean$startdate)
   combined_clean$enddate <- as.factor(combined_clean$enddate)
   combined_clean$starttime <- NULL
   combined_clean$endtime <- NULL
   combined_clean$core <- as.factor(combined_clean$core)
-  # combined_clean$weights <- 1/5
   
   for (i in 1:length(factors)) {
     combined_clean[,factors[i]] <- as.factor(combined_clean[,factors[i]])
   }   
   
+  combined_clean <- subset(combined_clean, select=-c(gross_monthly_income,net_monthly_income,net_monthly_income_capped))
+  
   return(combined_clean)
   
 }
 
+get_means <- function(data_frame){
+  data_frame_enjoy <- data_frame %>% group_by(id) %>% summarise(enjoy_mean=round(mean(as.numeric(enjoy))))
+  data_frame_difficult <- data_frame %>% group_by(id) %>% summarise(difficult_mean=round(mean(as.numeric(difficult))))
+  data_frame_thinking <- data_frame %>% group_by(id) %>% summarise(thinking_mean=round(mean(as.numeric(thinking))))
+  data_frame_clear <- data_frame %>% group_by(id) %>% summarise(clear_mean=round(mean(as.numeric(clear))))
+  data_frame_interesting <- data_frame %>% group_by(id) %>% summarise(interesting_mean=round(mean(as.numeric(interesting))))
+  
+  data_frame <- merge(x=data_frame,y=data_frame_enjoy,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_difficult,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_thinking,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_clear,by="id")
+  data_frame <- merge(x=data_frame,y=data_frame_interesting,by="id")
+  
+  data_frame$enjoy_mean <- as.factor(data_frame$enjoy_mean)
+  data_frame$difficult_mean <- as.factor(data_frame$difficult_mean)
+  data_frame$thinking_mean <- as.factor(data_frame$thinking_mean)
+  data_frame$interesting_mean <- as.factor(data_frame$interesting_mean)
+  data_frame$clear_mean <- as.factor(data_frame$clear_mean)
+  
+  data_frame <- subset(data_frame, select=-c(enjoy,thinking,clear,difficult))
+  
+  return(data_frame)
+}
+
+
+subset_train <- function(data_frame){
+  # TESTING ON OUR KNOWN DATA
+  
+  train_percentage <- 0.8
+  train_index <- sample(1:nrow(data_frame), floor(nrow(data_frame)*train_percentage))
+  train_data <- data_frame[train_index, ]
+  row.names(train_data) <- NULL
+  
+  test_set <- data_frame[-train_index, ]
+  test_index <- as.numeric(row.names(test_set))
+  row.names(test_set) <- NULL
+  
+  train_data <- get_means(train_data)
+  train_data$id <- as.factor(train_data$id)
+  
+  test_set$id <- as.factor(test_set$id)
+  test_set <- subset(test_set, select=-c(enjoy,thinking,clear,difficult))
+  test_set <- merge(x=test_set, 
+                    y=unique(train_data[,c("id","thinking_mean","enjoy_mean","difficult_mean","clear_mean","interesting_mean")]),
+                    by="id",
+                    all.x=TRUE)
+  
+  data <- list(train_data, test_set)
+  
+  return(data)
+}
+
+scale_data <- function(data_frame, test = FALSE)
+{
+  data_frame$duration <- log(data_frame$duration)
+  data_frame$gross_monthly_income_imputed <- log(data_frame$gross_monthly_income_imputed + 1)
+  data_frame$net_monthly_income_imputed <- log(data_frame$net_monthly_income_imputed + 1)
+  data_frame$gross_household_income <- log(data_frame$gross_household_income + 1)
+  data_frame$net_household_income <- log(data_frame$net_household_income + 1)
+  
+  nums_og_train <- sapply(data_frame, is.numeric)
+  ints_og_train <- sapply(data_frame, is.integer)
+  
+  if(test == TRUE){
+    id <- data_frame$id
+    obs <- data_frame$obs
+    data_frame[,nums_og_train | ints_og_train] <- scale(data_frame[,nums_og_train | ints_og_train])
+    data_frame$id <- id
+    data_frame$obs <- obs
+  }
+  
+  else{
+    id <- data_frame$id
+    obs <- data_frame$obs
+    data_frame[,nums_og_train | ints_og_train] <- scale(data_frame[,nums_og_train | ints_og_train])
+    data_frame$id <- id
+    data_frame$obs <- obs
+  }
+  
+  return(data_frame)
+}
+
+# CLEANING UP THE TRAIN_DATA
 # think about grouping by id
 # how many surveys have they done
 # how many surveys have they done up to that point 
 # average duration 
-original_data <- cleanup(original_data, test=FALSE)
+train_data <- cleanup(original_train_data, test=FALSE)
 
-test_data <- cleanup(test_data, test=TRUE)
+trainlist <- subset_train(train_data)
+
+newtrain <- trainlist[[1]]
+
+newtest <- trainlist[[2]]
+
+train_data <- get_means(train_data)
+
+train_data <- scale_data(train_data,test=FALSE)
+
+# CLEANING UP THE TEST_DATA
+test_data <- cleanup(original_test_data, test=TRUE)
+test_data <- merge(x=test_data, 
+                   y=unique(train_data[,c("id","thinking_mean","enjoy_mean","difficult_mean","clear_mean","interesting_mean")]),
+                   by="id",
+                   all.x=TRUE)
+
+test_data <- scale_data(test_data, test=TRUE)
