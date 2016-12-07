@@ -4,7 +4,7 @@
 
 wts <- function(df1, df2, df3, train.df, strt, end, inc){
   
-  temp <- train.df[train.df$obs %in% df1$obs]
+  temp <- train.df[train.df$obs %in% df1$obs,]
   temp <- temp[order(temp$obs),]
   
   df1 <- df1[order(df1$obs),]
