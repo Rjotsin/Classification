@@ -111,6 +111,10 @@ MakeSets <- function(train.df, test.df) {
 
 }
 
-all_sets <- MakeSets(newtrain, newtest)
+all_sets_split <- MakeSets(newtrain, newtest)
+train_list_split <- all_sets_split[[1]]
+test_list_split <- all_sets_split[[2]]
+
+all_sets <- MakeSets(train_data, test_data)
 train_list <- all_sets[[1]]
 test_list <- all_sets[[2]]

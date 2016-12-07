@@ -9,7 +9,7 @@ gbm_preds <- function(train_list,test_list)
 
         gbm_fit1 <- gbm(interesting ~ ., 
                         cv.folds = 2,
-                        n.trees = 50,
+                        n.trees = 90,
                         data = train_list[[1]], 
                         distribution = "multinomial",
                         shrinkage = 0.1, 
@@ -20,7 +20,7 @@ gbm_preds <- function(train_list,test_list)
 
         gbm_fit2 <- gbm(interesting ~ ., 
                         cv.folds = 2,
-                        n.trees = 50,
+                        n.trees = 100,
                         data = train_list[[2]], 
                         distribution = "multinomial",
                         shrinkage = 0.1, 
@@ -31,7 +31,7 @@ gbm_preds <- function(train_list,test_list)
 
         gbm_fit3 <- gbm(interesting ~ ., 
                         cv.folds = 2,
-                        n.trees = 90,
+                        n.trees = 120,
                         data = train_list[[3]], 
                         distribution = "multinomial",
                         shrinkage = 0.1, 
@@ -57,7 +57,7 @@ gbm_preds <- function(train_list,test_list)
         gbm_predict_prob2 <- cbind(test_list[[2]]$obs, gbm_predict_prob2)
         gbm_predict_prob3 <- as.data.frame(predict.gbm(gbm_fit3, test_list[[3]], n.trees=best.iter3, type="response"))
         gbm_predict_prob3 <- cbind(test_list[[3]]$obs, gbm_predict_prob3)
-        gbm_predict_prob4 <- as.data.frame(predict.gbm(gbm_fit4, test_list[[4]], n.trees=best.iter1, type="response"))
+        gbm_predict_prob4 <- as.data.frame(predict.gbm(gbm_fit4, test_list[[4]], n.trees=best.iter4, type="response"))
         gbm_predict_prob4 <- cbind(test_list[[4]]$obs, gbm_predict_prob4)
 
         colnames(gbm_predict_prob1) <- c("obs","interesting1","interesting2","interesting3","interesting4","interesting5")
@@ -72,7 +72,19 @@ gbm_preds <- function(train_list,test_list)
         return(list(pred_prob_list, gbm_predict_prob_final))
 }
 
+gbm_results_split <- gbm_preds(train_list_split, test_list_split)
+write.table (gbm_results_split[[1]][1], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob_split1.csv")
+write.table (gbm_results_split[[1]][2], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob_split2.csv")
+write.table (gbm_results_split[[1]][3], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob_split3.csv")
+write.table (gbm_results_split[[1]][4], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob_split4.csv")
+write.table (gbm_results_split[[2]], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob_split_final.csv")
+
 gbm_results <- gbm_preds(train_list, test_list)
+write.table (gbm_results[[1]][1], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob1.csv")
+write.table (gbm_results[[1]][2], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob2.csv")
+write.table (gbm_results[[1]][3], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob3.csv")
+write.table (gbm_results[[1]][4], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob4.csv")
+write.table (gbm_results[[2]], col.names=T, row.names=F, quote=F, sep=",", file="gbm_prob_final.csv")
 
 multnom_preds <- function(train_list, test_list)
     {
@@ -126,8 +138,6 @@ multnom_preds <- function(train_list, test_list)
         train3_mult$year_month_m <- NULL
         train4_mult$year_month_m <- NULL
 
-        #train_data$interesting <-relevel(train_data$interesting, ref = "1")
-
         control <- trainControl(method="none", classProbs = TRUE, summaryFunction = multiClassSummary, allowParallel=TRUE)
 
         model1 <- train(interesting ~ ., data=train1_mult, method="multinom", trControl=control, tuneGrid = data.frame(decay = 0.1), maxit = 500)
@@ -156,6 +166,10 @@ multnom_preds <- function(train_list, test_list)
         return(list(multnom_prob_list, mult_predict_final))
 
     }
+
+mn_results <- multnom_preds(train_list_split, test_list_split)
+
+mn_results <- multnom_preds(train_list, test_list)
 
 rf_preds <- function(train_list, test_list)
     {
